@@ -1,0 +1,57 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Start Container",
+            "type": "shell",
+            "command": "docker",
+            "args": [
+                "run",
+                "-it",
+                "--rm",
+                "--user",
+                "root",
+                "-v",
+                ".:/home/hadoop/workspace/",
+                "-v",
+                "aws-glue-vscode-server:/root/.vscode-server",
+                "-e",
+                "AWS_PROFILE=${input:awsProfile}",
+                "-e",
+                "AWS_SHARED_CREDENTIALS_FILE=/home/hadoop/workspace/.aws/credentials",
+                "--name",
+                "glue5_pyspark",
+                "public.ecr.aws/glue/aws-glue-libs:5",
+                "pyspark"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": false,
+                "echo": false,
+                "group": "Container"
+            }
+        },
+    ],
+    "inputs": [
+        {
+            "id": "awsProfile",
+            "type": "command",
+            "command": "extension.commandvariable.pickStringRemember",
+            "args": {
+                "description": "Select local AWS Profile",
+                "fileName": "${workspaceFolder}/.aws/config",
+                "fileFormat": "pattern",
+                "pattern": {
+                    "regexp": "\\[(?:profile\\s+)?([^\\]]+)\\]",
+                    "match": "line",
+                },
+            }
+        }
+    ]
+}
