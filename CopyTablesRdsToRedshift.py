@@ -80,9 +80,9 @@ class GlueRDSToRedshift:
 
     def read_from_rds(self, table_config):
         log_output(
-            f"Reading from Catalog: DB: {self.source_db}, \
-                Table: {self.source_table_prefix + table_config['name']}, \
-                    last_id: {table_config['last_id']}, columns: {table_config['columns']}"
+            f"Reading from Catalog: DB: {self.source_db}, "
+            f"Table: {self.source_table_prefix + table_config['name']}, "
+            f"last_id: {table_config['last_id']}, columns: {table_config['columns']}"
         )
 
         if self.environment != "PROD":
