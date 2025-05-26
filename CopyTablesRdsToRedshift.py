@@ -79,6 +79,12 @@ class GlueRDSToRedshift:
         self.job.commit()
 
     def read_from_rds(self, table_config):
+        log_output(
+            f"Reading from Catalog: DB: {self.source_db}, \
+                Table: {self.source_table_prefix + table_config['name']}, \
+                    last_id: {table_config['last_id']}, columns: {table_config['columns']}"
+        )
+
         if self.environment != "PROD":
             return
 
@@ -105,9 +111,6 @@ class GlueRDSToRedshift:
     def run(self):
         try:
             for table_config in self.tables:
-                log_output(
-                    f"Reading from RDS: {table_config['name']} with last_id {table_config['last_id']} and columns {table_config['columns']}"
-                )
                 df = self.read_from_rds(table_config)
                 df.printSchema() if df else log_output("No data returned from RDS")
                 self.write_to_redshift(df, table_config["name"])
