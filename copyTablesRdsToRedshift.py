@@ -31,20 +31,29 @@ def parse_table_spec(spec: str) -> List[dict]:
 
 
 def log_output(message: str):
-    print(message)
+    print(f"[INFO] {message}")
 
 
 class GlueRDSToRedshift:
     def __init__(self):
-        params = ['JOB_NAME', 'RUNTIME_ENV', 'TABLES']
+        self.parse_arguments()
+
+        # Initialize Glue context and job
+        self.init_context(self.job_name)
+
+    def parse_arguments(self):
+        params = ['JOB_NAME', 'RUNTIME_ENV', 'SOURCE_DB', 'SOURCE_TABLE_PREFIX', 'TABLES']
         args = getResolvedOptions(sys.argv, params)
         self.environment = 'PRODUCTION' if 'RUNTIME_ENV' not in args else args['RUNTIME_ENV'].upper()
 
         # Parse table specifications
         self.tables = parse_table_spec(args['TABLES'])
+        self.source_db = args['SOURCE_DB']
+        self.source_table_prefix = args['SOURCE_TABLE_PREFIX']
+        log_output(f"Parsed tables: {self.tables}")
+        log_output(f"Source DB: {self.source_db}, Source Table Prefix: {self.source_table_prefix}")
 
-        # Initialize Glue context and job
-        self.init_context(args['JOB_NAME'])
+        self.job_name = args['JOB_NAME']
         
 
     def init_context(self, job_name):
@@ -66,8 +75,8 @@ class GlueRDSToRedshift:
 
         # Use Glue Catalog connection
         return self.context.create_dynamic_frame.from_catalog(
-            database="your_glue_db",
-            table_name=table_config["name"],
+            database=self.source_db,
+            table_name=self.source_table_prefix + table_config["name"],
             push_down_predicate=f"id > {table_config['last_id']}",
             select_fields=None if table_config["columns"] == ['*'] else table_config["columns"]
         )
@@ -75,6 +84,7 @@ class GlueRDSToRedshift:
     def write_to_redshift(self, dynamic_frame, table_name):
         if self.environment != 'PROD':
             return
+        # return
         
         # Use Glue Catalog connection
         self.context.write_dynamic_frame.from_catalog(
@@ -86,8 +96,9 @@ class GlueRDSToRedshift:
     def run(self):
         try:
             for table_config in self.tables:
-                log_output(f"[INFO] Reading from RDS: {table_config['name']} with last_id {table_config['last_id']} and columns {table_config['columns']}")
+                log_output(f"Reading from RDS: {table_config['name']} with last_id {table_config['last_id']} and columns {table_config['columns']}")
                 df = self.read_from_rds(table_config)
+                df.printSchema() if df else log_output("No data returned from RDS")
                 self.write_to_redshift(df, table_config["name"])
             self.commit_job()
         except Exception as e:
