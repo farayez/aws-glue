@@ -79,24 +79,32 @@ class GlueRDSToRedshift:
         self.job.commit()
 
     def read_from_rds(self, table_config):
+        catalog_table_name = self.source_table_prefix + table_config["name"]
+        sample_query_datastore = f"SELECT {','.join(table_config['columns'])} FROM {table_config['name']} WHERE id>={table_config['last_id']}"
+
         log_output(
             f"Reading from Catalog: DB: {self.source_db}, "
             f"Table: {self.source_table_prefix + table_config['name']}, "
-            f"last_id: {table_config['last_id']}, columns: {table_config['columns']}"
+            f"last_id: {table_config['last_id']}, columns: {table_config['columns']} "
+            f"Sample Query: {sample_query_datastore}"
         )
 
         if self.environment != "PROD":
             return
 
         # Use Glue Catalog connection
-        return self.context.create_dynamic_frame.from_catalog(
+        df = self.context.create_dynamic_frame.from_catalog(
             database=self.source_db,
-            table_name=self.source_table_prefix + table_config["name"],
-            push_down_predicate=f"id > {table_config['last_id']}",
-            select_fields=(
-                None if table_config["columns"] == ["*"] else table_config["columns"]
-            ),
+            table_name=catalog_table_name,
+            additional_options={
+                "sampleQuery": sample_query_datastore,
+            },
         )
+
+        df.printSchema()
+        log_output(f"Number of rows read: {df.count()}")
+        df.toDF().show(5)
+        return df
 
     def write_to_redshift(self, dynamic_frame, table_name):
         if self.environment != "PROD":
