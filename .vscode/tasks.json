@@ -18,31 +18,7 @@
         {
             "label": "Launch Container",
             "type": "shell",
-            "command": "docker",
-            "args": [
-                "run",
-                "-d",
-                "-it",
-                "--rm",
-                "--user",
-                "root",
-                "-v",
-                ".:/home/hadoop/workspace/",
-                "-v",
-                "./jars/:/opt/spark/jars/",
-                "-v",
-                "aws-glue-vscode-server:/root/.vscode-server",
-                "-e",
-                "AWS_PROFILE=${input:awsProfile}",
-                "-e",
-                "AWS_SHARED_CREDENTIALS_FILE=/home/hadoop/workspace/.aws/credentials",
-                "-e",
-                "AWS_CONFIG_FILE=/home/hadoop/workspace/.aws/config",
-                "--name",
-                "glue5_pyspark",
-                "public.ecr.aws/glue/aws-glue-libs:5",
-                "pyspark"
-            ],
+            "command": "./startDevContainer.sh ${input:awsProfile} ./.aws/credentials",
             "problemMatcher": [],
             "presentation": {
                 "reveal": "silent",
@@ -50,7 +26,7 @@
                 "panel": "shared",
                 "showReuseMessage": false,
                 "clear": false,
-                "echo": false,
+                "echo": true,
                 "group": "Container"
             }
         },
@@ -68,7 +44,8 @@
                 "focus": false,
                 "panel": "shared",
                 "showReuseMessage": false,
-                "clear": false
+                "clear": false,
+                "group": "Container"
             }
         }
     ],
