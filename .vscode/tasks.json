@@ -5,10 +5,23 @@
     "tasks": [
         {
             "label": "Start Container",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Launch Container",
+                "Attach to Container"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Launch Container",
             "type": "shell",
             "command": "docker",
             "args": [
                 "run",
+                "-d",
                 "-it",
                 "--rm",
                 "--user",
@@ -32,8 +45,8 @@
             ],
             "problemMatcher": [],
             "presentation": {
-                "reveal": "always",
-                "focus": true,
+                "reveal": "silent",
+                "focus": false,
                 "panel": "shared",
                 "showReuseMessage": false,
                 "clear": false,
@@ -41,6 +54,23 @@
                 "group": "Container"
             }
         },
+        {
+            "label": "Attach to Container",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "code --folder-uri \"vscode-remote://attached-container+$(printf 'glue5_pyspark' | xxd -p)/home/hadoop/workspace\""
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": false
+            }
+        }
     ],
     "inputs": [
         {
