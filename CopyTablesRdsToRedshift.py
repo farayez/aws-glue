@@ -47,6 +47,10 @@ class GlueRDSToRedshift:
             "RUNTIME_ENV",
             "SOURCE_DB",
             "SOURCE_TABLE_PREFIX",
+            "DESTINATION_CONNECTION",
+            "DESTINATION_DB",
+            "DESTINATION_SCHEMA",
+            "S3_TEMP_DIR",
             "TABLES",
         ]
         args = getResolvedOptions(sys.argv, params)
@@ -58,6 +62,10 @@ class GlueRDSToRedshift:
         self.tables = parse_table_spec(args["TABLES"])
         self.source_db = args["SOURCE_DB"]
         self.source_table_prefix = args["SOURCE_TABLE_PREFIX"]
+        self.destination_connection = args["DESTINATION_CONNECTION"]
+        self.destination_db = args["DESTINATION_DB"]
+        self.destination_schema = args["DESTINATION_SCHEMA"]
+        self.s3_temp_dir = args["S3_TEMP_DIR"]
         log_output(f"Parsed tables: {self.tables}")
         log_output(
             f"Source DB: {self.source_db}, Source Table Prefix: {self.source_table_prefix}"
@@ -101,27 +109,61 @@ class GlueRDSToRedshift:
             },
         )
 
-        df.printSchema()
-        log_output(f"Number of rows read: {df.count()}")
-        df.toDF().show(5)
+        # df.printSchema()
+        # log_output(f"Number of rows read: {df.count()}")
+        # df.toDF().show(5)
         return df
 
-    def write_to_redshift(self, dynamic_frame, table_name):
+    def write_to_redshift_using_connection(self, dynamic_frame, table_name):
         if self.environment != "PROD":
             return
         # return
 
-        # Use Glue Catalog connection
-        self.context.write_dynamic_frame.from_catalog(
-            frame=dynamic_frame, database="your_redshift_db", table_name=table_name
+        connection_options = {
+            "redshiftTmpDir": self.s3_temp_dir,
+            "useConnectionProperties": "true",
+            "dbtable": f"{self.destination_schema}.{table_name}",
+            "connectionName": self.destination_connection,
+            # "preactions": preactions,
+            # "extracopyoptions": "TRUNCATECOLUMNS MAXERROR 1",
+            # "postactions": f"ANALYZE {redshift_schema}.{table};",
+        }
+        log_output(
+            f"Writing to Redshift table: {table_name}, options: {connection_options}"
+        )
+
+        self.context.write_dynamic_frame.from_options(
+            frame=dynamic_frame,
+            connection_type="redshift",
+            connection_options=connection_options,
+            # transformation_ctx=f"redshift_write_{table_name}",
+        )
+
+    def write_to_redshift_using_jdbc_conf(self, dynamic_frame, table_name):
+        if self.environment != "PROD":
+            return
+        # return
+
+        connection_options = {
+            "dbtable": f"{self.destination_schema}.{table_name}",
+            "database": self.destination_db,
+            # "aws_iam_role": "arn:aws:iam::role-account-id:role/rs-role-name",
+            "redshiftTmpDir": self.s3_temp_dir,
+        }
+
+        # Use Redshift connection options
+        self.context.write_dynamic_frame.from_jdbc_conf(
+            frame=dynamic_frame,
+            catalog_connection=self.destination_connection,
+            redshift_tmp_dir=self.s3_temp_dir,
+            connection_options=connection_options,
         )
 
     def run(self):
         try:
             for table_config in self.tables:
                 df = self.read_from_rds(table_config)
-                df.printSchema() if df else log_output("No data returned from RDS")
-                self.write_to_redshift(df, table_config["name"])
+                self.write_to_redshift_using_connection(df, table_config["name"])
             self.commit_job()
         except Exception as e:
             self.commit_job()
