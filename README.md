@@ -52,6 +52,17 @@ Arguments:
 - Write new Glue jobs in `source` directory
 - Test jobs locally before deploying to AWS
 
+### VS Code Extensions
+
+When first launching the container, VS Code will automatically create a volume named `aws-glue-vscode-server` that persists extensions between container launches. The following extensions are recommended for Python development in the container:
+
+- [Python](https://marketplace.visualstudio.com/items?itemName=ms-python.python): Python language support
+- [Black Formatter](https://marketplace.visualstudio.com/items?itemName=ms-python.black-formatter): Python code formatting
+
+Additionally, for VS Code Tasks to work properly, the following extension must be installed in your host VS Code instance:
+
+- [Command Variable](https://marketplace.visualstudio.com/items?itemName=rioj7.command-variable): Required for dynamic task variables
+
 ### VS Code Tasks
 
 This project includes preconfigured VS Code tasks to streamline the development workflow:
