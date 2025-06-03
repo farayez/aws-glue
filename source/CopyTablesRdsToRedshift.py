@@ -168,26 +168,6 @@ class GlueRDSToRedshift:
         )
         log_output(f"Successfully wrote to Redshift table: {table_name}")
 
-    def write_to_redshift_using_jdbc_conf(self, dynamic_frame, table_name):
-        if self.environment != "PROD":
-            return
-        # return
-
-        connection_options = {
-            "dbtable": f"{self.destination_schema}.{table_name}",
-            "database": self.destination_db,
-            # "aws_iam_role": "arn:aws:iam::role-account-id:role/rs-role-name",
-            "redshiftTmpDir": self.s3_temp_dir,
-        }
-
-        # Use Redshift connection options
-        self.context.write_dynamic_frame.from_jdbc_conf(
-            frame=dynamic_frame,
-            catalog_connection=self.destination_connection,
-            redshift_tmp_dir=self.s3_temp_dir,
-            connection_options=connection_options,
-        )
-
     def run(self):
         try:
             for table_config in self.tables:
