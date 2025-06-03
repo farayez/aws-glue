@@ -34,6 +34,29 @@ def log_output(message: str):
     print(f"[INFO] {message}")
 
 
+def map_spark_type_to_redshift(spark_type):
+    mapping = {
+        "string": "VARCHAR(65535)",
+        "int": "INTEGER",
+        "bigint": "BIGINT",
+        "double": "DOUBLE PRECISION",
+        "float": "FLOAT4",
+        "boolean": "BOOLEAN",
+        "timestamp": "TIMESTAMP",
+        "date": "DATE",
+        "decimal": "DECIMAL(38,10)",
+    }
+    return mapping.get(spark_type.lower(), "VARCHAR(65535)")
+
+
+def generate_redshift_ddl_from_schema(schema, table_name, schema_name):
+    cols = [
+        f'"{field.name}" {map_spark_type_to_redshift(field.dataType.typeName())}'
+        for field in schema.fields
+    ]
+    return f'CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (\n  {",  ".join(cols)}\n);'
+
+
 class GlueRDSToRedshift:
     def __init__(self):
         self.parse_arguments()
@@ -119,15 +142,20 @@ class GlueRDSToRedshift:
             return
         # return
 
+        create_table_sql = generate_redshift_ddl_from_schema(
+            dynamic_frame.schema(), table_name, self.destination_schema
+        )
+
         connection_options = {
             "redshiftTmpDir": self.s3_temp_dir,
             "useConnectionProperties": "true",
             "dbtable": f"{self.destination_schema}.{table_name}",
             "connectionName": self.destination_connection,
-            # "preactions": preactions,
-            # "extracopyoptions": "TRUNCATECOLUMNS MAXERROR 1",
+            "preactions": create_table_sql,
+            "extracopyoptions": "TRUNCATECOLUMNS MAXERROR 1",
             # "postactions": f"ANALYZE {redshift_schema}.{table};",
         }
+
         log_output(
             f"Writing to Redshift table: {table_name}, options: {connection_options}"
         )
@@ -138,6 +166,7 @@ class GlueRDSToRedshift:
             connection_options=connection_options,
             # transformation_ctx=f"redshift_write_{table_name}",
         )
+        log_output(f"Successfully wrote to Redshift table: {table_name}")
 
     def write_to_redshift_using_jdbc_conf(self, dynamic_frame, table_name):
         if self.environment != "PROD":
