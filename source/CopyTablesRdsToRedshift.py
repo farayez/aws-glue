@@ -49,12 +49,14 @@ def map_spark_type_to_redshift(spark_type):
     return mapping.get(spark_type.lower(), "VARCHAR(65535)")
 
 
-def generate_redshift_ddl_from_schema(schema, table_name, schema_name):
+def generate_redshift_create_table_stmnt(schema, table_name, schema_name):
     cols = [
         f'"{field.name}" {map_spark_type_to_redshift(field.dataType.typeName())}'
         for field in schema.fields
     ]
-    return f'CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (\n  {",  ".join(cols)}\n);'
+    return (
+        f'CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (  {",  ".join(cols)});'
+    )
 
 
 class GlueRDSToRedshift:
@@ -137,23 +139,34 @@ class GlueRDSToRedshift:
         # df.toDF().show(5)
         return df
 
-    def write_to_redshift_using_connection(self, dynamic_frame, table_name):
+    def write_to_redshift_using_connection(self, dynamic_frame, table_config):
         if self.environment != "PROD":
             return
         # return
 
-        create_table_sql = generate_redshift_ddl_from_schema(
+        table_name = table_config["name"]
+        last_id = table_config["last_id"]
+
+        create_table_sql = generate_redshift_create_table_stmnt(
             dynamic_frame.schema(), table_name, self.destination_schema
         )
+
+        # If last_id > 0, delete rows with id > last_id, otherwise truncate the table
+        if last_id > 0:
+            preaction = f"DELETE FROM {self.destination_schema}.{table_name} WHERE id > {last_id};"
+        else:
+            preaction = f"TRUNCATE TABLE {self.destination_schema}.{table_name};"
+
+        preaction += f"{create_table_sql}"
 
         connection_options = {
             "redshiftTmpDir": self.s3_temp_dir,
             "useConnectionProperties": "true",
             "dbtable": f"{self.destination_schema}.{table_name}",
             "connectionName": self.destination_connection,
-            "preactions": create_table_sql,
+            "preactions": preaction,
             "extracopyoptions": "TRUNCATECOLUMNS MAXERROR 1",
-            # "postactions": f"ANALYZE {redshift_schema}.{table};",
+            # "postactions": f"ANALYZE {self.destination_schema}.{table_name};",
         }
 
         log_output(
@@ -172,7 +185,7 @@ class GlueRDSToRedshift:
         try:
             for table_config in self.tables:
                 df = self.read_from_rds(table_config)
-                self.write_to_redshift_using_connection(df, table_config["name"])
+                self.write_to_redshift_using_connection(df, table_config)
             self.commit_job()
         except Exception as e:
             self.commit_job()
