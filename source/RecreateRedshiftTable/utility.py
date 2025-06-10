@@ -1,6 +1,4 @@
 from pyspark.sql.types import (
-    StructType,
-    StructField,
     StringType,
     IntegerType,
     DoubleType,
@@ -59,10 +57,10 @@ def map_glue_type_to_spark(glue_type):
         return StringType()  # default fallback
 
 
-def get_glue_catalog_schema(
+def get_redshift_columns_from_catalog(
     glue_client, database_name, table_name, included_columns=None
 ):
-    """Fetch the table schema from Glue Data Catalog and convert to Spark StructType."""
+    """Fetch the table schema from Glue Data Catalog and convert to Redshift Types."""
 
     if not glue_client:
         glue_client = boto3.client("glue")
@@ -80,10 +78,6 @@ def get_glue_catalog_schema(
             glue_type = col["Type"]
             redshift_type = map_glue_type_to_redshift(glue_type)
             redshift_columns.append(f'"{col_name}" {redshift_type}')
-
-    log_output(f"Fetched Redshift schema for {database_name}.{table_name}:")
-    for col_def in redshift_columns:
-        log_output(col_def)
 
     return redshift_columns
 
@@ -113,7 +107,7 @@ def recreate_redshift_table_from_columns(
     # if dist_key:
     #     create_table_stmt += f" DISTKEY ({dist_key})"
 
-    create_table_stmt += f";ANALYZE {destination_schema}.{table_name};"
+    create_table_stmt += f"; ANALYZE {destination_schema}.{table_name};"
 
     log_output(f"Executing DDL:\n{create_table_stmt}")
 

@@ -1,5 +1,4 @@
 import sys
-from typing import List
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
@@ -9,12 +8,12 @@ import boto3
 from utility import (
     parse_table_spec_from_blended_parameter,
     log_output,
-    get_glue_catalog_schema,
+    get_redshift_columns_from_catalog,
     recreate_redshift_table_from_columns,
 )
 
 
-class GlueRDSToRedshift:
+class RecreateRedshiftTables:
     def __init__(self):
         self.parse_arguments()
 
@@ -77,13 +76,13 @@ class GlueRDSToRedshift:
     def run(self):
         try:
             for table_config in self.tables:
-                schema = get_glue_catalog_schema(
+                schema = get_redshift_columns_from_catalog(
                     self.glue_client,
                     self.source_db,
                     self.source_table_prefix + table_config["name"],
                     table_config["columns"],
                 )
-                log_output(f"Schema for {table_config['name']}: {schema}")
+                log_output(f"Creating columns in {table_config['name']}: {schema}")
                 recreate_redshift_table_from_columns(
                     self.redshift_client,
                     self.destination_workgroup_name,
@@ -99,4 +98,4 @@ class GlueRDSToRedshift:
 
 
 if __name__ == "__main__":
-    GlueRDSToRedshift().run()
+    RecreateRedshiftTables().run()
