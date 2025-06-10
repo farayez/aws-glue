@@ -190,7 +190,3 @@ class GlueRDSToRedshift:
         except Exception as e:
             self.commit_job()
             raise e
-
-
-if __name__ == "__main__":
-    GlueRDSToRedshift().run()
