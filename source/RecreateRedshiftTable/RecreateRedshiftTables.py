@@ -69,15 +69,13 @@ def recreate_redshift_table_from_columns(
     sort_key = table_config["sort_key"]
     dist_key = table_config["dist_key"]
 
-    create_table_stmt = f"""
-    DROP TABLE IF EXISTS {destination_schema}.{table_name};
-    CREATE TABLE {destination_schema}.{table_name} ({', '.join(redshift_columns)})
-    """
+    create_table_stmt = f"DROP TABLE IF EXISTS {destination_schema}.{table_name}; CREATE TABLE {destination_schema}.{table_name} ({', '.join(redshift_columns)})"
+
     # Add sort and distribution keys if specified
     if sort_key:
         create_table_stmt += f" SORTKEY ({sort_key})"
-    if dist_key:
-        create_table_stmt += f" DISTKEY ({dist_key})"
+    # if dist_key:
+    #     create_table_stmt += f" DISTKEY ({dist_key})"
 
     create_table_stmt += f";ANALYZE {destination_schema}.{table_name};"
 
