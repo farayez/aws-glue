@@ -4,6 +4,9 @@ from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue.utils import getResolvedOptions
+from pyspark.sql.types import DecimalType, LongType
+from pyspark.sql.functions import col
+from awsglue.dynamicframe import DynamicFrame
 
 
 def parse_table_spec(spec: str) -> List[dict]:
@@ -111,6 +114,20 @@ class GlueRDSToRedshift:
             return
         self.job.commit()
 
+    def cast_decimal_to_long(self, dynamic_frame):
+        """Cast Decimal(20,0) to Long in the DynamicFrame."""
+        df = dynamic_frame.toDF()
+        for field in df.schema.fields:
+            if (
+                isinstance(field.dataType, DecimalType)
+                and field.dataType.scale == 0
+                and field.dataType.precision == 20
+            ):
+                log_output(f"Casting column {field.name} from Decimal(20,0) to Long")
+                df = df.withColumn(field.name, col(field.name).cast(LongType()))
+
+        return DynamicFrame.fromDF(df, self.context, "casted_df")
+
     def read_from_rds(self, table_config):
         catalog_table_name = self.source_table_prefix + table_config["name"]
         sample_query_datastore = f"SELECT {','.join(table_config['columns'])} FROM {table_config['name']} WHERE id>={table_config['last_id']}"
@@ -134,10 +151,12 @@ class GlueRDSToRedshift:
             },
         )
 
+        updated_df = self.cast_decimal_to_long(df)
+
         # df.printSchema()
         # log_output(f"Number of rows read: {df.count()}")
         # df.toDF().show(5)
-        return df
+        return updated_df
 
     def write_to_redshift_using_connection(self, dynamic_frame, table_config):
         if self.environment != "PROD":
