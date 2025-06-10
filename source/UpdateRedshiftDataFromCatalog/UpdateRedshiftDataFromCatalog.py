@@ -157,7 +157,7 @@ class GlueRDSToRedshift:
         else:
             preaction = f"TRUNCATE TABLE {self.destination_schema}.{table_name};"
 
-        preaction += f"{create_table_sql}"
+        # preaction += f"{create_table_sql}"
 
         connection_options = {
             "redshiftTmpDir": self.s3_temp_dir,
@@ -166,7 +166,6 @@ class GlueRDSToRedshift:
             "connectionName": self.destination_connection,
             "preactions": preaction,
             "extracopyoptions": "TRUNCATECOLUMNS MAXERROR 1",
-            # "postactions": f"ANALYZE {self.destination_schema}.{table_name};",
         }
 
         log_output(
@@ -190,3 +189,7 @@ class GlueRDSToRedshift:
         except Exception as e:
             self.commit_job()
             raise e
+
+
+if __name__ == "__main__":
+    GlueRDSToRedshift().run()
