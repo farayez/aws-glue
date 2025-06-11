@@ -6,9 +6,12 @@ from pyspark.sql.types import (
     TimestampType,
     DateType,
     DecimalType,
+    LongType,
 )
 from typing import List
 import boto3
+from awsglue.dynamicframe import DynamicFrame
+from pyspark.sql.functions import col
 
 
 def map_glue_type_to_redshift(glue_type):
@@ -24,6 +27,16 @@ def map_glue_type_to_redshift(glue_type):
         "decimal": "DECIMAL(38,10)",
     }
     return mapping.get(glue_type.lower(), "VARCHAR(65535)")
+
+
+def generate_redshift_create_table_stmnt(schema, table_name, schema_name):
+    cols = [
+        f'"{field.name}" {map_glue_type_to_redshift(field.dataType.typeName())}'
+        for field in schema.fields
+    ]
+    return (
+        f'CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (  {",  ".join(cols)});'
+    )
 
 
 def map_glue_type_to_spark(glue_type):
@@ -80,6 +93,21 @@ def get_redshift_columns_from_catalog(
             redshift_columns.append(f'"{col_name}" {redshift_type}')
 
     return redshift_columns
+
+
+def cast_decimal_to_long(glue_context, dynamic_frame):
+    """Cast Decimal(20,0) to Long in the DynamicFrame."""
+    df = dynamic_frame.toDF()
+    for field in df.schema.fields:
+        if (
+            isinstance(field.dataType, DecimalType)
+            and field.dataType.scale == 0
+            and field.dataType.precision == 20
+        ):
+            log_output(f"Casting column {field.name} from Decimal(20,0) to Long")
+            df = df.withColumn(field.name, col(field.name).cast(LongType()))
+
+    return DynamicFrame.fromDF(df, glue_context, "casted_df")
 
 
 def recreate_redshift_table_from_columns(

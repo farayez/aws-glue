@@ -7,6 +7,11 @@ from awsglue.utils import getResolvedOptions
 from pyspark.sql.types import DecimalType, LongType
 from pyspark.sql.functions import col
 from awsglue.dynamicframe import DynamicFrame
+from utility import (
+    parse_table_spec_from_blended_parameter,
+    log_output,
+    cast_decimal_to_long,
+)
 
 
 def parse_table_spec(spec: str) -> List[dict]:
@@ -31,35 +36,6 @@ def parse_table_spec(spec: str) -> List[dict]:
 
         tables.append(table_config)
     return tables
-
-
-def log_output(message: str):
-    print(f"[INFO] {message}")
-
-
-def map_spark_type_to_redshift(spark_type):
-    mapping = {
-        "string": "VARCHAR(65535)",
-        "int": "INTEGER",
-        "bigint": "BIGINT",
-        "double": "DOUBLE PRECISION",
-        "float": "FLOAT4",
-        "boolean": "BOOLEAN",
-        "timestamp": "TIMESTAMP",
-        "date": "DATE",
-        "decimal": "DECIMAL(38,10)",
-    }
-    return mapping.get(spark_type.lower(), "VARCHAR(65535)")
-
-
-def generate_redshift_create_table_stmnt(schema, table_name, schema_name):
-    cols = [
-        f'"{field.name}" {map_spark_type_to_redshift(field.dataType.typeName())}'
-        for field in schema.fields
-    ]
-    return (
-        f'CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (  {",  ".join(cols)});'
-    )
 
 
 class GlueRDSToRedshift:
@@ -87,7 +63,9 @@ class GlueRDSToRedshift:
         )
 
         # Parse table specifications
-        self.tables = parse_table_spec(args["TABLES"])
+        self.tables = parse_table_spec_from_blended_parameter(
+            args["TABLES"], keys=["name", "columns", "last_id"]
+        )
         self.source_db = args["SOURCE_DB"]
         self.source_table_prefix = args["SOURCE_TABLE_PREFIX"]
         self.destination_connection = args["DESTINATION_CONNECTION"]
@@ -100,6 +78,8 @@ class GlueRDSToRedshift:
         )
 
         self.job_name = args["JOB_NAME"]
+
+        return
 
     def init_context(self, job_name):
         if self.environment != "PROD":
@@ -114,28 +94,25 @@ class GlueRDSToRedshift:
             return
         self.job.commit()
 
-    def cast_decimal_to_long(self, dynamic_frame):
-        """Cast Decimal(20,0) to Long in the DynamicFrame."""
-        df = dynamic_frame.toDF()
-        for field in df.schema.fields:
-            if (
-                isinstance(field.dataType, DecimalType)
-                and field.dataType.scale == 0
-                and field.dataType.precision == 20
-            ):
-                log_output(f"Casting column {field.name} from Decimal(20,0) to Long")
-                df = df.withColumn(field.name, col(field.name).cast(LongType()))
-
-        return DynamicFrame.fromDF(df, self.context, "casted_df")
-
     def read_from_rds(self, table_config):
-        catalog_table_name = self.source_table_prefix + table_config["name"]
-        sample_query_datastore = f"SELECT {','.join(table_config['columns'])} FROM {table_config['name']} WHERE id>={table_config['last_id']}"
+        last_id = table_config["last_id"]
+        columns = table_config["columns"]
+        table_name = table_config["name"]
+
+        # Default to ["*"] if columns is None or empty
+        columns = table_config["columns"] if table_config.get("columns") else ["*"]
+
+        catalog_table_name = self.source_table_prefix + table_name
+
+        sample_query_datastore = f"SELECT {','.join(columns)} FROM {table_name}"
+
+        if last_id and last_id > 0:
+            sample_query_datastore += f" WHERE id>={last_id}"
 
         log_output(
             f"Reading from Catalog: DB: {self.source_db}, "
-            f"Table: {self.source_table_prefix + table_config['name']}, "
-            f"last_id: {table_config['last_id']}, columns: {table_config['columns']} "
+            f"Table: {self.source_table_prefix + table_name}, "
+            f"last_id: {last_id}, columns: {columns} "
             f"Sample Query: {sample_query_datastore}"
         )
 
@@ -143,7 +120,7 @@ class GlueRDSToRedshift:
             return
 
         # Use Glue Catalog connection
-        df = self.context.create_dynamic_frame.from_catalog(
+        dynamic_frame = self.context.create_dynamic_frame.from_catalog(
             database=self.source_db,
             table_name=catalog_table_name,
             additional_options={
@@ -151,12 +128,12 @@ class GlueRDSToRedshift:
             },
         )
 
-        updated_df = self.cast_decimal_to_long(df)
+        updated_dynamic_frame = cast_decimal_to_long(self.context, dynamic_frame)
 
-        # df.printSchema()
-        # log_output(f"Number of rows read: {df.count()}")
-        # df.toDF().show(5)
-        return updated_df
+        # updated_dynamic_frame.printSchema()
+        # log_output(f"Number of rows read: {updated_dynamic_frame.count()}")
+        # updated_dynamic_frame.toDF().show(5)
+        return updated_dynamic_frame
 
     def write_to_redshift_using_connection(self, dynamic_frame, table_config):
         if self.environment != "PROD":
@@ -166,17 +143,11 @@ class GlueRDSToRedshift:
         table_name = table_config["name"]
         last_id = table_config["last_id"]
 
-        create_table_sql = generate_redshift_create_table_stmnt(
-            dynamic_frame.schema(), table_name, self.destination_schema
-        )
-
         # If last_id > 0, delete rows with id > last_id, otherwise truncate the table
-        if last_id > 0:
+        if last_id and last_id > 0:
             preaction = f"DELETE FROM {self.destination_schema}.{table_name} WHERE id > {last_id};"
         else:
             preaction = f"TRUNCATE TABLE {self.destination_schema}.{table_name};"
-
-        # preaction += f"{create_table_sql}"
 
         connection_options = {
             "redshiftTmpDir": self.s3_temp_dir,
