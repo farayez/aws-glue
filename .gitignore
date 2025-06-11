@@ -1,2 +1,3 @@
 .aws
 jars
+**/__pycache__

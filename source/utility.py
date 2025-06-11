@@ -13,7 +13,7 @@ import boto3
 
 def map_glue_type_to_redshift(glue_type):
     mapping = {
-        "string": "VARCHAR(65535)",
+        "string": "VARCHAR(255)",
         "int": "INTEGER",
         "bigint": "BIGINT",
         "double": "DOUBLE PRECISION",
@@ -63,7 +63,7 @@ def get_redshift_columns_from_catalog(
     """Fetch the table schema from Glue Data Catalog and convert to Redshift Types."""
 
     if not glue_client:
-        glue_client = boto3.client("glue")
+        glue_client = boto3.client("glue")  # type: ignore
 
     response = glue_client.get_table(DatabaseName=database_name, Name=table_name)
     columns = response["Table"]["StorageDescriptor"]["Columns"]
@@ -93,7 +93,7 @@ def recreate_redshift_table_from_columns(
     """Drop and recreate a Redshift table using boto3 Redshift Data API based on Redshift column definitions."""
 
     if not redshift_client:
-        redshift_client = boto3.client("redshift-data")
+        redshift_client = boto3.client("redshift-data")  # type: ignore
 
     table_name = table_config["name"]
     sort_key = table_config["sort_key"]

@@ -62,8 +62,8 @@ class RecreateRedshiftTables:
         if self.environment != "PROD":
             return
 
-        self.glue_client = boto3.client("glue")
-        self.redshift_client = boto3.client("redshift-data")
+        self.glue_client = boto3.client("glue")  # type: ignore
+        self.redshift_client = boto3.client("redshift-data")  # type: ignore
         self.context = GlueContext(SparkContext.getOrCreate())
         self.job = Job(self.context)
         self.job.init(job_name)
@@ -82,7 +82,9 @@ class RecreateRedshiftTables:
                     self.source_table_prefix + table_config["name"],
                     table_config["columns"],
                 )
-                log_output(f"Creating columns in {table_config['name']}: {schema}")
+                log_output(
+                    f"Creating table `{table_config['name']}` with columns: {schema}"
+                )
                 recreate_redshift_table_from_columns(
                     self.redshift_client,
                     self.destination_workgroup_name,
