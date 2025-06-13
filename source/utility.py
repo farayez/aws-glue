@@ -153,7 +153,7 @@ def log_output(message: str):
     print(f"[INFO] {message}")
 
 
-def parse_table_spec_from_blended_parameter(
+def prepare_dictionaries_from_blended_parameter(
     blended_parameter: str,
     keys: List[str],
 ) -> List[dict]:
@@ -169,7 +169,7 @@ def parse_table_spec_from_blended_parameter(
                    If a value is None or there are fewer values than keys, those keys will have None value.
 
     Example:
-        >>> parse_table_spec_from_blended_parameter("table1:col1,col2:key1;table2:*:key2",
+        >>> prepare_dictionaries_from_blended_parameter("table1:col1,col2:key1;table2:*:key2",
         ...                                       ["name", "columns", "sort_key"])
         [{"name": "table1", "columns": ["col1","col2"], "sort_key": "key1"},
          {"name": "table2", "columns": ["*"], "sort_key": "key2"}]
@@ -190,6 +190,9 @@ def parse_table_spec_from_blended_parameter(
         if config.get("columns") is not None:
             columns_str = config["columns"]
             config["columns"] = columns_str.split(",") if columns_str != "*" else ["*"]
+
+        if config.get("last_id") is not None:
+            config["last_id"] = int(config["last_id"])
 
         result.append(config)
 
@@ -224,3 +227,27 @@ def parse_blended_parameter(
         parts = [p.strip() or None for p in spec.split(value_delimiter)]
         blended_config.append(parts)
     return blended_config
+
+
+def get_partition_config_for_table(partition_configs, table_name):
+    # Find matching partition config for the table
+    partition_config = next(
+        (config for config in partition_configs if config["table_name"] == table_name),
+        {},
+    )
+
+    hashpartitions = (
+        partition_config["hashpartitions"]
+        if partition_config.get("hashpartitions")
+        else "1"
+    )
+    hashfield = (
+        partition_config["hashfield"] if partition_config.get("hashfield") else "id"
+    )
+    should_partition = hashpartitions and int(hashpartitions) > 1
+
+    return {
+        "should_partition": should_partition,
+        "hashpartitions": hashpartitions,
+        "hashfield": hashfield,
+    }

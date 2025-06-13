@@ -8,7 +8,8 @@ from pyspark.sql.types import DecimalType, LongType
 from pyspark.sql.functions import col
 from awsglue.dynamicframe import DynamicFrame
 from utility import (
-    parse_table_spec_from_blended_parameter,
+    prepare_dictionaries_from_blended_parameter,
+    get_partition_config_for_table,
     log_output,
     cast_decimal_to_long,
 )
@@ -56,6 +57,7 @@ class UpdateRedshiftDataFromCatalog:
             "DESTINATION_SCHEMA",
             "S3_TEMP_DIR",
             "TABLES",
+            "PARTITIONS",
         ]
         args = getResolvedOptions(sys.argv, params)
         self.environment = (
@@ -63,7 +65,7 @@ class UpdateRedshiftDataFromCatalog:
         )
 
         # Parse table specifications
-        self.tables = parse_table_spec_from_blended_parameter(
+        self.tables = prepare_dictionaries_from_blended_parameter(
             args["TABLES"], keys=["name", "columns", "last_id"]
         )
         self.source_db = args["SOURCE_DB"]
@@ -72,6 +74,10 @@ class UpdateRedshiftDataFromCatalog:
         self.destination_db = args["DESTINATION_DB"]
         self.destination_schema = args["DESTINATION_SCHEMA"]
         self.s3_temp_dir = args["S3_TEMP_DIR"]
+        self.partition_configs = prepare_dictionaries_from_blended_parameter(
+            args["PARTITIONS"], keys=["table_name", "hashfield", "hashpartitions"]
+        )
+
         log_output(f"Parsed tables: {self.tables}")
         log_output(
             f"Source DB: {self.source_db}, Source Table Prefix: {self.source_table_prefix}"
@@ -96,20 +102,59 @@ class UpdateRedshiftDataFromCatalog:
 
     def create_dynamic_frame_from_catalog(self, table_name, columns, last_id):
         # Default to ["*"] if columns is None or empty
-        columns = columns if columns else ["*"]
-
         catalog_table_name = self.source_table_prefix + table_name
+        columns = columns if columns else ["*"]
+        last_id = last_id if last_id and last_id > 0 else 0
 
-        sample_query_datastore = f"SELECT {','.join(columns)} FROM {table_name}"
+        # Get partitions configurations for table
+        partition_config = get_partition_config_for_table(
+            self.partition_configs, table_name
+        )
+        hashpartitions, hashfield, should_partition = (
+            partition_config["hashpartitions"],
+            partition_config["hashfield"],
+            partition_config["should_partition"],
+        )
 
-        if last_id and last_id > 0:
-            sample_query_datastore += f" WHERE id>={last_id}"
+        # hashpartitions = "11"
+        # hashfield = "user_id"
+
+        additional_options = {
+            "enablePartitioningForSampleQuery": False,
+            "hashpartitions": "1",
+        }
+
+        # Modify columns and offset using sampleQuery
+        if columns != ["*"] or last_id > 0:
+            # Either custom columns or last_id is specified
+            sample_query_datastore = f"SELECT {','.join(columns)} FROM {table_name}"
+
+            if last_id > 0:
+                # last_id is specified
+                sample_query_datastore += f" WHERE id>={last_id}"
+
+                if should_partition:
+                    # Partitioning is enabled
+                    sample_query_datastore += f" AND"
+                    additional_options["enablePartitioningForSampleQuery"] = True
+
+            additional_options["sampleQuery"] = sample_query_datastore
+
+        # Configure partitioning
+        if should_partition:
+            additional_options.update(
+                {
+                    "hashpartitions": hashpartitions,
+                    "hashfield": hashfield,
+                    # "hashexpression": partition_config["hashfield"],
+                }
+            )
 
         log_output(
             f"Reading from Catalog: DB: {self.source_db}, "
             f"Table: {self.source_table_prefix + table_name}, "
             f"last_id: {last_id}, columns: {columns} "
-            f"Sample Query: {sample_query_datastore}"
+            f"Additional Options: {additional_options}"
         )
 
         if self.environment != "PROD":
@@ -119,9 +164,7 @@ class UpdateRedshiftDataFromCatalog:
         dynamic_frame = self.context.create_dynamic_frame.from_catalog(
             database=self.source_db,
             table_name=catalog_table_name,
-            additional_options={
-                "sampleQuery": sample_query_datastore,
-            },
+            additional_options=additional_options,
         )
 
         # dynamic_frame.printSchema()
