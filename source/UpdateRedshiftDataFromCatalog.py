@@ -38,7 +38,7 @@ def parse_table_spec(spec: str) -> List[dict]:
     return tables
 
 
-class GlueRDSToRedshift:
+class UpdateRedshiftDataFromCatalog:
     def __init__(self):
         self.parse_arguments()
 
@@ -94,13 +94,9 @@ class GlueRDSToRedshift:
             return
         self.job.commit()
 
-    def read_from_rds(self, table_config):
-        last_id = table_config["last_id"]
-        columns = table_config["columns"]
-        table_name = table_config["name"]
-
+    def create_dynamic_frame_from_catalog(self, table_name, columns, last_id):
         # Default to ["*"] if columns is None or empty
-        columns = table_config["columns"] if table_config.get("columns") else ["*"]
+        columns = columns if columns else ["*"]
 
         catalog_table_name = self.source_table_prefix + table_name
 
@@ -128,20 +124,14 @@ class GlueRDSToRedshift:
             },
         )
 
-        updated_dynamic_frame = cast_decimal_to_long(self.context, dynamic_frame)
+        # dynamic_frame.printSchema()
+        # log_output(f"Number of rows read: {dynamic_frame.count()}")
+        # dynamic_frame.toDF().show(5)
+        return dynamic_frame
 
-        # updated_dynamic_frame.printSchema()
-        # log_output(f"Number of rows read: {updated_dynamic_frame.count()}")
-        # updated_dynamic_frame.toDF().show(5)
-        return updated_dynamic_frame
-
-    def write_to_redshift_using_connection(self, dynamic_frame, table_config):
+    def write_to_redshift_using_connection(self, dynamic_frame, table_name, last_id):
         if self.environment != "PROD":
             return
-        # return
-
-        table_name = table_config["name"]
-        last_id = table_config["last_id"]
 
         # If last_id > 0, delete rows with id > last_id, otherwise truncate the table
         if last_id and last_id > 0:
@@ -173,8 +163,19 @@ class GlueRDSToRedshift:
     def run(self):
         try:
             for table_config in self.tables:
-                df = self.read_from_rds(table_config)
-                self.write_to_redshift_using_connection(df, table_config)
+                dynamic_frame = self.create_dynamic_frame_from_catalog(
+                    table_name=table_config["name"],
+                    columns=table_config["columns"],
+                    last_id=table_config["last_id"],
+                )
+
+                dynamic_frame = cast_decimal_to_long(self.context, dynamic_frame)
+
+                self.write_to_redshift_using_connection(
+                    dynamic_frame,
+                    table_name=table_config["name"],
+                    last_id=table_config["last_id"],
+                )
             self.commit_job()
         except Exception as e:
             self.commit_job()
@@ -182,4 +183,4 @@ class GlueRDSToRedshift:
 
 
 if __name__ == "__main__":
-    GlueRDSToRedshift().run()
+    UpdateRedshiftDataFromCatalog().run()
