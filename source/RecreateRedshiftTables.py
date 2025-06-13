@@ -6,7 +6,7 @@ from awsglue.utils import getResolvedOptions
 
 import boto3
 from utility import (
-    parse_table_spec_from_blended_parameter,
+    prepare_dictionaries_from_blended_parameter,
     log_output,
     get_redshift_columns_from_catalog,
     recreate_redshift_table_from_columns,
@@ -39,7 +39,7 @@ class RecreateRedshiftTables:
         )
 
         # Parse table specifications
-        self.tables = parse_table_spec_from_blended_parameter(
+        self.tables = prepare_dictionaries_from_blended_parameter(
             args["TABLES"], keys=["name", "columns", "sort_key", "dist_key"]
         )
         self.source_db = args["SOURCE_DB"]
