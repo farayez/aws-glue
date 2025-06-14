@@ -137,6 +137,10 @@ class UpdateRedshiftDataFromCatalog:
                     # Partitioning is enabled
                     sample_query_datastore += f" AND"
                     additional_options["enablePartitioningForSampleQuery"] = True
+            elif should_partition:
+                # Partitioning is enabled but last_id is not specified
+                sample_query_datastore += f" WHERE"
+                additional_options["enablePartitioningForSampleQuery"] = True
 
             additional_options["sampleQuery"] = sample_query_datastore
 
