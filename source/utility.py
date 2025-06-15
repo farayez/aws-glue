@@ -8,7 +8,7 @@ from pyspark.sql.types import (
     DecimalType,
     LongType,
 )
-from typing import List
+from typing import List, Optional, Type
 import boto3
 from awsglue.dynamicframe import DynamicFrame
 from pyspark.sql.functions import col
@@ -156,6 +156,65 @@ def log_output(message: str):
 def prepare_dictionaries_from_blended_parameter(
     blended_parameter: str,
     keys: List[str],
+    types: Optional[List[Type]] = None,
+) -> List[dict]:
+    """Convert blended parameter string into a list of dictionaries using provided keys.
+
+    Args:
+        blended_parameter (str): String in format "val1:val2:val3;val4:val5:val6"
+        keys (List[str]): List of keys to use for dictionary creation.
+        types (List[type], optional): List of types to convert values to. Must match length of keys.
+                                    Defaults to None (no type conversion).
+
+    Returns:
+        List[dict]: List of dictionaries where each value from blended parameter is mapped to corresponding key
+                   and converted to specified type if types parameter is provided.
+
+    Example:
+        >>> prepare_dictionaries_from_blended_parameter(
+        ...     "table1:10:key1;table2:20:key2",
+        ...     ["name", "id", "sort_key"],
+        ...     [str, int, str]
+        ... )
+        [{"name": "table1", "id": 10, "sort_key": "key1"},
+         {"name": "table2", "id": 20, "sort_key": "key2"}]
+    """
+    if types and len(types) != len(keys):
+        raise ValueError("Length of types must match length of keys")
+
+    blended_config = parse_blended_parameter(
+        blended_parameter, entry_delimiter=";", value_delimiter=":"
+    )
+
+    result = []
+    for values in blended_config:
+        config: dict = {}
+        for i, key in enumerate(keys):
+            value = values[i] if i < len(values) else None
+
+            # Apply type conversion if types is provided and value exists
+            if types and value is not None:
+                try:
+                    # Special handling for list type (comma-separated strings)
+                    if types[i] == list and isinstance(value, str):
+                        value = [v.strip() for v in value.split(",") if v.strip()]
+                    else:
+                        value = types[i](value.strip())
+                except (ValueError, TypeError) as e:
+                    raise ValueError(
+                        f"Failed to convert value '{value}' to type {types[i]} for key '{key}': {str(e)}"
+                    )
+
+            config[key] = value
+
+        result.append(config)
+
+    return result
+
+
+def prepare_dictionaries_from_blended_parameter2(
+    blended_parameter: str,
+    keys: List[str],
 ) -> List[dict]:
     """Convert blended parameter string into a list of dictionaries using provided keys.
 
@@ -195,6 +254,9 @@ def prepare_dictionaries_from_blended_parameter(
         # Convert numeric fields to integers
         if config.get("start_id") is not None:
             config["start_id"] = int(config["start_id"].strip())
+
+        if config.get("end_id") is not None:
+            config["end_id"] = int(config["end_id"].strip())
 
         result.append(config)
 

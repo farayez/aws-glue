@@ -1,4 +1,5 @@
 import unittest
+from typing import List
 from utility import prepare_dictionaries_from_blended_parameter
 
 
@@ -7,7 +8,10 @@ class TestUtility(unittest.TestCase):
         """Test basic functionality with table configuration"""
         blended_parameter = "table1:col1,col2:key1;table2:*:key2"
         keys = ["name", "columns", "sort_key"]
-        result = prepare_dictionaries_from_blended_parameter(blended_parameter, keys)
+        types = [str, list, str]
+        result = prepare_dictionaries_from_blended_parameter(
+            blended_parameter, keys, types
+        )
 
         expected = [
             {"name": "table1", "columns": ["col1", "col2"], "sort_key": "key1"},
@@ -26,7 +30,10 @@ class TestUtility(unittest.TestCase):
         """Test with missing values which should be None"""
         blended_parameter = "table1:col1;table2:col2,col3:key2:extra"
         keys = ["name", "columns", "sort_key", "dist_key"]
-        result = prepare_dictionaries_from_blended_parameter(blended_parameter, keys)
+        types = [str, list, str, str]
+        result = prepare_dictionaries_from_blended_parameter(
+            blended_parameter, keys, types
+        )
 
         expected = [
             {"name": "table1", "columns": ["col1"], "sort_key": None, "dist_key": None},
@@ -39,20 +46,70 @@ class TestUtility(unittest.TestCase):
         ]
         self.assertEqual(result, expected)
 
-    def test_prepare_dictionaries_numeric_values(self):
-        """Test with numeric values that should be converted"""
-        blended_parameter = "table1:col1:key1:1:10"
-        keys = ["name", "columns", "sort_key", "start_id", "end_id"]
-        result = prepare_dictionaries_from_blended_parameter(blended_parameter, keys)
+    def test_prepare_dictionaries_with_types(self):
+        """Test with type conversion"""
+        blended_parameter = "table1:10:key1;table2:20:key2"
+        keys = ["name", "id", "sort_key"]
+        types = [str, int, str]
+        result = prepare_dictionaries_from_blended_parameter(
+            blended_parameter, keys, types
+        )
 
         expected = [
-            {
-                "name": "table1",
-                "columns": ["col1"],
-                "sort_key": "key1",
-                "start_id": 1,
-                "end_id": 10,
-            }
+            {"name": "table1", "id": 10, "sort_key": "key1"},
+            {"name": "table2", "id": 20, "sort_key": "key2"},
+        ]
+        self.assertEqual(result, expected)
+
+    def test_prepare_dictionaries_with_list_type(self):
+        """Test with list type conversion"""
+        blended_parameter = "table1:col1,col2:key1;table2:col3,col4:key2"
+        keys = ["name", "cols", "keys"]
+        types = [str, list, str]
+        result = prepare_dictionaries_from_blended_parameter(
+            blended_parameter, keys, types
+        )
+
+        expected = [
+            {"name": "table1", "cols": ["col1", "col2"], "keys": "key1"},
+            {"name": "table2", "cols": ["col3", "col4"], "keys": "key2"},
+        ]
+        self.assertEqual(result, expected)
+
+    def test_prepare_dictionaries_type_conversion_error(self):
+        """Test handling of type conversion errors"""
+        blended_parameter = "table1:not_a_number:key1"
+        keys = ["name", "id", "sort_key"]
+        types = [str, int, str]
+
+        with self.assertRaises(ValueError) as context:
+            prepare_dictionaries_from_blended_parameter(blended_parameter, keys, types)
+
+        self.assertTrue("Failed to convert value" in str(context.exception))
+
+    def test_prepare_dictionaries_invalid_types_length(self):
+        """Test validation of types list length"""
+        blended_parameter = "table1:col1:key1"
+        keys = ["name", "columns", "sort_key"]
+        types = [str, list]  # Missing one type
+
+        with self.assertRaises(ValueError) as context:
+            prepare_dictionaries_from_blended_parameter(blended_parameter, keys, types)
+
+        self.assertEqual(
+            str(context.exception), "Length of types must match length of keys"
+        )
+
+    def test_prepare_dictionaries_absent_types_parameter(self):
+        """Test all values should be treated as string when types parameter is absent"""
+        blended_parameter = "table1:10:key1;table2:20:key2"
+        keys = ["name", "id", "sort_key"]
+        result = prepare_dictionaries_from_blended_parameter(blended_parameter, keys)
+
+        # Without types parameter, all values should remain as strings
+        expected = [
+            {"name": "table1", "id": "10", "sort_key": "key1"},
+            {"name": "table2", "id": "20", "sort_key": "key2"},
         ]
         self.assertEqual(result, expected)
 
@@ -60,7 +117,10 @@ class TestUtility(unittest.TestCase):
         """Test with whitespace in the input"""
         blended_parameter = " table1 : col1, col2 : key1 ; table2 : * : key2 "
         keys = ["name", "columns", "sort_key"]
-        result = prepare_dictionaries_from_blended_parameter(blended_parameter, keys)
+        types = [str, list, str]
+        result = prepare_dictionaries_from_blended_parameter(
+            blended_parameter, keys, types
+        )
 
         expected = [
             {"name": "table1", "columns": ["col1", "col2"], "sort_key": "key1"},
@@ -72,7 +132,10 @@ class TestUtility(unittest.TestCase):
         """Test with empty values in the input"""
         blended_parameter = "table1::key1;table2:col1,:"
         keys = ["name", "columns", "sort_key"]
-        result = prepare_dictionaries_from_blended_parameter(blended_parameter, keys)
+        types = [str, list, str]
+        result = prepare_dictionaries_from_blended_parameter(
+            blended_parameter, keys, types
+        )
 
         expected = [
             {"name": "table1", "columns": None, "sort_key": "key1"},
@@ -84,7 +147,10 @@ class TestUtility(unittest.TestCase):
         """Test with special characters in values"""
         blended_parameter = "table-1:col.1,col@2:key_1"
         keys = ["name", "columns", "sort_key"]
-        result = prepare_dictionaries_from_blended_parameter(blended_parameter, keys)
+        types = [str, list, str]
+        result = prepare_dictionaries_from_blended_parameter(
+            blended_parameter, keys, types
+        )
 
         expected = [
             {"name": "table-1", "columns": ["col.1", "col@2"], "sort_key": "key_1"}
