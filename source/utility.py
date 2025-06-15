@@ -188,11 +188,13 @@ def prepare_dictionaries_from_blended_parameter(
 
         # Handle special case for columns field - if it's a comma-separated string, split it into list
         if config.get("columns") is not None:
-            columns_str = config["columns"]
-            config["columns"] = columns_str.split(",") if columns_str != "*" else ["*"]
+            config["columns"] = [
+                col.strip() for col in config["columns"].split(",") if col.strip()
+            ]
 
+        # Convert numeric fields to integers
         if config.get("start_id") is not None:
-            config["start_id"] = int(config["start_id"])
+            config["start_id"] = int(config["start_id"].strip())
 
         result.append(config)
 
