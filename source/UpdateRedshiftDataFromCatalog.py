@@ -15,30 +15,6 @@ from utility import (
 )
 
 
-def parse_table_spec(spec: str) -> List[dict]:
-    """Parse table specification string into list of table configs
-    Format: table1:*:40000;table2;table3:col1,col2,col3:900000
-    Returns: [{"name": "table1", "columns": ["col1","col2"], "last_id": 1000}, ...]
-    """
-    tables = []
-    for table_spec in spec.strip().split(";"):
-        parts = table_spec.split(":")
-        table_config = {
-            "name": parts[0],
-            "columns": ["*"],  # default to all columns
-            "last_id": 0,  # default to 0
-        }
-        # If columns are specified
-        if len(parts) >= 2 and parts[1]:  # Check if not empty
-            table_config["columns"] = parts[1].split(",") if parts[1] != "*" else ["*"]
-        # If last_id is specified
-        if len(parts) >= 3 and parts[2]:  # Check if not empty
-            table_config["last_id"] = int(parts[2])
-
-        tables.append(table_config)
-    return tables
-
-
 class UpdateRedshiftDataFromCatalog:
     def __init__(self):
         self.parse_arguments()
@@ -66,7 +42,7 @@ class UpdateRedshiftDataFromCatalog:
 
         # Parse table specifications
         self.tables = prepare_dictionaries_from_blended_parameter(
-            args["TABLES"], keys=["name", "columns", "last_id"]
+            args["TABLES"], keys=["name", "columns", "start_id"]
         )
         self.source_db = args["SOURCE_DB"]
         self.source_table_prefix = args["SOURCE_TABLE_PREFIX"]
@@ -100,11 +76,11 @@ class UpdateRedshiftDataFromCatalog:
             return
         self.job.commit()
 
-    def create_dynamic_frame_from_catalog(self, table_name, columns, last_id):
+    def create_dynamic_frame_from_catalog(self, table_name, columns, start_id):
         # Default to ["*"] if columns is None or empty
         catalog_table_name = self.source_table_prefix + table_name
         columns = columns if columns else ["*"]
-        last_id = last_id if last_id and last_id > 0 else 0
+        start_id = start_id if start_id and start_id > 0 else 0
 
         # Get partitions configurations for table
         partition_config = get_partition_config_for_table(
@@ -125,20 +101,20 @@ class UpdateRedshiftDataFromCatalog:
         }
 
         # Modify columns and offset using sampleQuery
-        if columns != ["*"] or last_id > 0:
-            # Either custom columns or last_id is specified
+        if columns != ["*"] or start_id > 0:
+            # Either custom columns or start_id is specified
             sample_query_datastore = f"SELECT {','.join(columns)} FROM {table_name}"
 
-            if last_id > 0:
-                # last_id is specified
-                sample_query_datastore += f" WHERE id>={last_id}"
+            if start_id > 0:
+                # start_id is specified
+                sample_query_datastore += f" WHERE id>={start_id}"
 
                 if should_partition:
                     # Partitioning is enabled
                     sample_query_datastore += f" AND"
                     additional_options["enablePartitioningForSampleQuery"] = True
             elif should_partition:
-                # Partitioning is enabled but last_id is not specified
+                # Partitioning is enabled but start_id is not specified
                 sample_query_datastore += f" WHERE"
                 additional_options["enablePartitioningForSampleQuery"] = True
 
@@ -157,7 +133,7 @@ class UpdateRedshiftDataFromCatalog:
         log_output(
             f"Reading from Catalog: DB: {self.source_db}, "
             f"Table: {self.source_table_prefix + table_name}, "
-            f"last_id: {last_id}, columns: {columns} "
+            f"start_id: {start_id}, columns: {columns} "
             f"Additional Options: {additional_options}"
         )
 
@@ -176,13 +152,13 @@ class UpdateRedshiftDataFromCatalog:
         # dynamic_frame.toDF().show(5)
         return dynamic_frame
 
-    def write_to_redshift_using_connection(self, dynamic_frame, table_name, last_id):
+    def write_to_redshift_using_connection(self, dynamic_frame, table_name, start_id):
         if self.environment != "PROD":
             return
 
-        # If last_id > 0, delete rows with id > last_id, otherwise truncate the table
-        if last_id and last_id > 0:
-            preaction = f"DELETE FROM {self.destination_schema}.{table_name} WHERE id > {last_id};"
+        # If start_id > 0, delete rows with id > start_id, otherwise truncate the table
+        if start_id and start_id > 0:
+            preaction = f"DELETE FROM {self.destination_schema}.{table_name} WHERE id > {start_id};"
         else:
             preaction = f"TRUNCATE TABLE {self.destination_schema}.{table_name};"
 
@@ -213,7 +189,7 @@ class UpdateRedshiftDataFromCatalog:
                 dynamic_frame = self.create_dynamic_frame_from_catalog(
                     table_name=table_config["name"],
                     columns=table_config["columns"],
-                    last_id=table_config["last_id"],
+                    start_id=table_config["start_id"],
                 )
 
                 dynamic_frame = cast_decimal_to_long(self.context, dynamic_frame)
@@ -221,7 +197,7 @@ class UpdateRedshiftDataFromCatalog:
                 self.write_to_redshift_using_connection(
                     dynamic_frame,
                     table_name=table_config["name"],
-                    last_id=table_config["last_id"],
+                    start_id=table_config["start_id"],
                 )
             self.commit_job()
         except Exception as e:

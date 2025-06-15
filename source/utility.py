@@ -191,8 +191,8 @@ def prepare_dictionaries_from_blended_parameter(
             columns_str = config["columns"]
             config["columns"] = columns_str.split(",") if columns_str != "*" else ["*"]
 
-        if config.get("last_id") is not None:
-            config["last_id"] = int(config["last_id"])
+        if config.get("start_id") is not None:
+            config["start_id"] = int(config["start_id"])
 
         result.append(config)
 
