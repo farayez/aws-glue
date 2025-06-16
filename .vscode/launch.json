@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": "${input:fileContent}",
+            "args": "${input:parameters}",
         },
     ],
     "inputs": [
@@ -23,5 +23,23 @@
                 "debug": true
             }
         },
+        {
+            "id": "parameters",
+            "type": "command",
+            "command": "extension.commandvariable.file.content",
+            "args": {
+                "fileName": "${pickFile:parameters}",
+                "pickFile": {
+                    "parameters": {
+                        "description": "Select file container Arguments",
+                        "include": "**/*.parameters",
+                        "display": "fileName",
+                        "fromFolder": {
+                            "fixed": "${fileDirname}"
+                        },
+                    }
+                }
+            }
+        }
     ]
 }

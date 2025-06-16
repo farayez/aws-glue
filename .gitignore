@@ -1,3 +1,4 @@
 .aws
 jars
 **/__pycache__
+**/*.parameters
