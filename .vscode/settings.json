@@ -2,5 +2,10 @@
     "python.defaultInterpreterPath": "/usr/bin/python3.11",
     "python.analysis.extraPaths": [
         "/usr/lib/spark/python/lib/py4j-0.10.9.7-src.zip:/usr/lib/spark/python/:/usr/lib/spark/python/lib/",
-    ]
+    ],
+    "python.testing.pytestArgs": [
+        "."
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
 }
