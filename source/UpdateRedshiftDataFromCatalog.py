@@ -42,7 +42,9 @@ class UpdateRedshiftDataFromCatalog:
 
         # Parse table specifications
         self.tables = prepare_dictionaries_from_blended_parameter(
-            args["TABLES"], keys=["name", "columns", "start_id"]
+            args["TABLES"],
+            keys=["name", "columns", "start_id"],
+            types=[str, list, int],
         )
         self.source_db = args["SOURCE_DB"]
         self.source_table_prefix = args["SOURCE_TABLE_PREFIX"]
